@@ -1,6 +1,7 @@
 Config = {}
 
-Config.Debug = true
+Config.Debug = false
+Config.FoodLicenseItem = nil -- Set to a real license item to require one for food-store ownership.
 
 Config.Language = "en" -- Language to use.
 
@@ -26,7 +27,7 @@ Config.BusinessAdministration = {
 }
 
 Config.BusinessSettings = {
-    rentCron = "* */1 * * *", -- https://overextended.dev/ox_lib/Modules/Cron/Server for more info.
+    rentCron = "0 */1 * * *", -- https://overextended.dev/ox_lib/Modules/Cron/Server for more info.
     salaryCron = "*/30 * * * *", -- https://overextended.dev/ox_lib/Modules/Cron/Server for more info.
     sellScale = 0.5, -- The multiplier to give back to the player when selling a business to the "state".
     maxLocations = 75, -- The maximum amount of locations a business can have.
@@ -565,18 +566,18 @@ Config.SupplyStores = {
 }
 
 Config.DefaultCallbacks = { -- If undefined in zone.callbacks, these will be used.
-    ownerCheck = function(source, businessId, business, ownershipType, price)
+    ownerCheck = function(source, businessId, ownershipType, price)
         -- Add checks for licenses, etc. Whatever you want!
         return true
     end,
-    postOwner = function(source, businessId, business, ownershipType, price)
+    postOwner = function(source, businessId, ownershipType, price)
         -- Add checks for licenses, etc. Whatever you want!
     end,
-    purchaseCheck = function(source, businessId, business, cart, price)
+    purchaseCheck = function(source, businessId, cart, price)
         -- Add checks for licenses, etc. Whatever you want!
         return true
     end,
-    postPurchase = function(source, businessId, business, cart, price)
+    postPurchase = function(source, businessId, cart, price)
         -- Add checks for licenses, etc. Whatever you want!
     end,
 }
@@ -604,7 +605,7 @@ Config.BusinessZones = { -- This is where you can create business types, which g
         label = "Food Store",
         callbacks = {
             ownerCheck = function(source, businessId, purchaseType, price)
-                local itemCount = Inventory.GetItemCount(source, "metal")
+                local itemCount = Config.FoodLicenseItem and Inventory.GetItemCount(source,Config.FoodLicenseItem) or 1
                 if not itemCount or itemCount < 1 then
                     ShowNotification(source, "You need a food store license to purchase items from here.")
                     return false

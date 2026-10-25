@@ -28,11 +28,13 @@ Inventory.GetInventory = function(source)
 end
 
 Inventory.AddItem = function(source, name, count, metadata, slot) -- Metadata is not required.
-    exports['qs-inventory']:AddItem(source, name, count, slot, metadata)
+    local ok=exports['qs-inventory']:AddItem(source, name, count, slot, metadata)
+    return ok==true
 end
 
 Inventory.RemoveItem = function(source, name, count, slot)
-    exports['qs-inventory']:RemoveItem(source, name, count, slot)
+    local ok=exports['qs-inventory']:RemoveItem(source, name, count, slot)
+    return ok==true
 end
 
 Inventory.SetMetadata = function(source, slot, metadata)

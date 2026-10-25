@@ -16,7 +16,7 @@ end
 
 function GetIdentifier(source)
     local xPlayer = ESX.GetPlayerFromId(source)
-    return xPlayer.identifier
+    return xPlayer and xPlayer.identifier
 end
 
 function GetSourceFromIdentifier(identifier)
@@ -24,37 +24,25 @@ function GetSourceFromIdentifier(identifier)
     return xPlayer and xPlayer.source or nil
 end
 
-function GetPaymentMethodAmount(source, method)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    if method == "cash" then
-        return xPlayer.getMoney()
-    elseif method == "card" then
-        return xPlayer.getAccount("bank").money
-    elseif method == "dirtycash" then
-        return xPlayer.getAccount("black_money").money
-    end
+function GetPaymentMethodAmount(src,method)
+    local p=ESX.GetPlayerFromId(src); if not p then return 0 end
+    if method=='cash' then return p.getMoney() end
+    local account=p.getAccount(method=='card' and 'bank' or 'black_money')
+    return account and account.money or 0
 end
-
-function ChargePaymentMethod(source, method, amount)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    if method == "cash" then
-        xPlayer.removeMoney(amount)
-    elseif method == "card" then
-        xPlayer.removeAccountMoney("bank", amount)
-    elseif method == "dirtycash" then
-        xPlayer.removeAccountMoney("black_money", amount)
-    end
+function ChargePaymentMethod(src,method,amount)
+    local p=ESX.GetPlayerFromId(src)
+    if not p or not BusinessInt(amount,0,2147483647) then return false end
+    local before=GetPaymentMethodAmount(src,method); if before<amount then return false end
+    if method=='cash' then p.removeMoney(amount) else p.removeAccountMoney(method=='card' and 'bank' or 'black_money',amount) end
+    return GetPaymentMethodAmount(src,method)==before-amount
 end
-
-function AddPaymentMethodAmount(source, method, amount)
-    local xPlayer = ESX.GetPlayerFromId(source)
-    if method == "cash" then
-        xPlayer.addMoney(amount)
-    elseif method == "card" then
-        xPlayer.addAccountMoney("bank", amount)
-    elseif method == "dirtycash" then
-        xPlayer.addAccountMoney("black_money", amount)
-    end
+function AddPaymentMethodAmount(src,method,amount)
+    local p=ESX.GetPlayerFromId(src)
+    if not p or not BusinessInt(amount,0,2147483647) then return false end
+    local before=GetPaymentMethodAmount(src,method)
+    if method=='cash' then p.addMoney(amount) else p.addAccountMoney(method=='card' and 'bank' or 'black_money',amount) end
+    return GetPaymentMethodAmount(src,method)==before+amount
 end
 
 function GetPlayerCharacterName(source)
@@ -132,26 +120,34 @@ CreateThread(function()
 
     Inventory.AddItem = function(source, name, count, metadata) -- Metadata is not required.
         local xPlayer = ESX.GetPlayerFromId(source)
+        local before=Inventory.GetItemCount(source,name)
         xPlayer.addInventoryItem(name, count)
         Inventory.UpdateInventory(source)
+        return Inventory.GetItemCount(source,name)==before + count
     end
 
     Inventory.RemoveItem = function(source, name, count)
         local xPlayer = ESX.GetPlayerFromId(source)
+        local before=Inventory.GetItemCount(source,name)
         xPlayer.removeInventoryItem(name, count)
         Inventory.UpdateInventory(source)
+        return Inventory.GetItemCount(source,name)==before - count
     end
 
     Inventory.AddWeapon = function(source, name, count, metadata) -- Metadata is not required.
         local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
         xPlayer.addWeapon(name, 0)
         Inventory.UpdateInventory(source)
+        return xPlayer.hasWeapon(name)
     end
 
     Inventory.RemoveWeapon = function(source, name, count)
         local xPlayer = ESX.GetPlayerFromId(source)
+        if not xPlayer then return false end
         xPlayer.removeWeapon(name, 0)
         Inventory.UpdateInventory(source)
+        return not xPlayer.hasWeapon(name)
     end
 
     Inventory.GetItemCount = function(source, name)

@@ -15,8 +15,9 @@ function ShowNotification(target, text)
 end
 
 function GetIdentifier(source)
-    local xPlayer = QBCore.Functions.GetPlayer(source).PlayerData
-    return xPlayer.citizenid 
+    local player=QBCore.Functions.GetPlayer(source)
+    local xPlayer=player and player.PlayerData
+    return xPlayer and xPlayer.citizenid
 end
 
 function GetSourceFromIdentifier(identifier)
@@ -24,37 +25,25 @@ function GetSourceFromIdentifier(identifier)
     return xPlayer and xPlayer.PlayerData.source or nil
 end
 
-function GetPaymentMethodAmount(source, method)
-    local xPlayer = QBCore.Functions.GetPlayer(source)
-    if method == "cash" then
-        return xPlayer.PlayerData.money.cash
-    elseif method == "card" then
-        return xPlayer.PlayerData.money.bank
-    elseif method == "dirtycash" then
-        return xPlayer.PlayerData.money.black_money
-    end
+function GetPaymentMethodAmount(src,method)
+    local p=QBCore.Functions.GetPlayer(src)
+    if not p then return 0 end
+    if method=='dirtycash' then return Inventory.GetItemCount(src,Config.DirtyMoneyItem or 'markedbills') end
+    return p.PlayerData.money[method=='card' and 'bank' or 'cash'] or 0
 end
-
-function ChargePaymentMethod(source, method, amount)
-    local xPlayer = QBCore.Functions.GetPlayer(source)
-    if method == "cash" then
-        xPlayer.Functions.RemoveMoney("cash", amount)
-    elseif method == "card" then
-        xPlayer.Functions.RemoveMoney("bank", amount)
-    elseif method == "dirtycash" then
-        xPlayer.Functions.RemoveMoney("black_money", amount)
-    end
+function ChargePaymentMethod(src,method,amount)
+    if not BusinessInt(amount,0,2147483647) then return false end
+    local p=QBCore.Functions.GetPlayer(src); if not p then return false end
+    if amount==0 then return true end
+    if method=='dirtycash' then return Inventory.RemoveItem(src,Config.DirtyMoneyItem or 'markedbills',amount)==true end
+    return p.Functions.RemoveMoney(method=='card' and 'bank' or 'cash',amount)==true
 end
-
-function AddPaymentMethodAmount(source, method, amount)
-    local xPlayer = QBCore.Functions.GetPlayer(source)
-    if method == "cash" then
-        xPlayer.Functions.AddMoney("cash", amount)
-    elseif method == "card" then
-        xPlayer.Functions.AddMoney("bank", amount)
-    elseif method == "dirtycash" then
-        xPlayer.Functions.AddMoney("black_money", amount)
-    end
+function AddPaymentMethodAmount(src,method,amount)
+    if not BusinessInt(amount,0,2147483647) then return false end
+    local p=QBCore.Functions.GetPlayer(src); if not p then return false end
+    if amount==0 then return true end
+    if method=='dirtycash' then return Inventory.AddItem(src,Config.DirtyMoneyItem or 'markedbills',amount)==true end
+    return p.Functions.AddMoney(method=='card' and 'bank' or 'cash',amount)==true
 end
 
 function GetPlayerCharacterName(source)
@@ -68,7 +57,8 @@ end
 
 function CheckPermission(source, permission)
     local source = tonumber(source)
-    local xPlayer = QBCore.Functions.GetPlayer(source).PlayerData
+    local player=QBCore.Functions.GetPlayer(source)
+    local xPlayer=player and player.PlayerData
     local name = xPlayer.job.name
     local rank = xPlayer.job.grade.level
     if permission.jobs[name] and permission.jobs[name] <= rank then 
@@ -131,22 +121,24 @@ CreateThread(function()
 
     Inventory.AddItem = function(source, name, count, metadata) -- Metadata is not required.
         local xPlayer = QBCore.Functions.GetPlayer(source)
-        xPlayer.Functions.AddItem(name, count, nil, metadata)
+        local ok=xPlayer.Functions.AddItem(name, count, nil, metadata)
         Inventory.UpdateInventory(source)
+        return ok==true
     end
 
     Inventory.RemoveItem = function(source, name, count, slot)
         local xPlayer = QBCore.Functions.GetPlayer(source)
-        xPlayer.Functions.RemoveItem(name, count, slot)
+        local ok=xPlayer.Functions.RemoveItem(name, count, slot)
         Inventory.UpdateInventory(source)
+        return ok==true
     end
 
     Inventory.AddWeapon = function(source, name, count, metadata) -- Metadata is not required.
-        Inventory.AddItem(source, name, count, metadata)
+        return Inventory.AddItem(source, name, count, metadata)
     end
 
     Inventory.RemoveWeapon = function(source, name, count)
-        Inventory.RemoveItem(source, name, count, metadata)
+        return Inventory.RemoveItem(source, name, count, metadata)
     end
 
     Inventory.GetItemCount = function(source, name)

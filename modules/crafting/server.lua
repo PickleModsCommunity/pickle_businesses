@@ -26,33 +26,23 @@ function CheckRequired(source, required)
     return success, missingItems
 end
 
-function TakeRequired(source, required)
-    if not required or #required < 1 then return true end
-    for i=1, #required do 
-        local part = required[i]
-        if (not part.type or part.type == "item") then
-            Inventory.RemoveItem(source, part.name, part.count)
-        elseif (part.type == "cash") then
-            RemoveMoney(source, part.count)
-        elseif (part.type == "weapon" and not Inventory.HasWeapon(source, part.name)) then
-            Inventory.RemoveWeapon(source, part.name, 1)
-        end
+function TakeRequired(src,required)
+    local taken={}
+    for _,p in ipairs(required or {}) do
+        local take=p.type=='weapon' and Inventory.RemoveWeapon or p.type=='cash' and function(src,_,n) return ChargePaymentMethod(src,'cash',n) end or Inventory.RemoveItem
+        local give=p.type=='weapon' and Inventory.AddWeapon or p.type=='cash' and function(src,_,n) return AddPaymentMethodAmount(src,'cash',n) end or Inventory.AddItem
+        local count=p.type=='weapon' and 1 or p.count
+        if take(src,p.name,count)~=true then for _,r in ipairs(taken) do r.give(src,r.name,r.count) end; return false end
+        taken[#taken+1]={give=give,name=p.name,count=count}
     end
+    return true
 end
-
-function GiveRewards(source, rewards)
-    for i=1, #rewards do 
-        local reward = rewards[i]
-        if not reward.type or reward.type == "item" then
-            Inventory.AddItem(source, reward.name, reward.count, reward.createItem and reward.createItem(craftingData) or nil)
-        elseif reward.type == "cash" then
-            AddMoney(source, reward.count)
-        elseif reward.type == "weapon" then
-            Inventory.AddWeapon(source, reward.name, reward.count, reward.createItem and reward.createItem(craftingData) or nil)
-        elseif Config.XPEnabled and reward.type == "xp" then 
-            AddPlayerXP(source, reward.name, reward.count)
-        end
+function GiveRewards(src,rewards,craftingData)
+    for _,r in ipairs(rewards) do
+        local give=r.type=='weapon' and Inventory.AddWeapon or r.type=='cash' and function(src,_,n) return AddPaymentMethodAmount(src,'cash',n) end or Inventory.AddItem
+        if give(src,r.name,r.count,r.createItem and r.createItem(craftingData) or nil)~=true then return false end
     end
+    return true
 end
 
 function IsCraftingInProgress(businessId, locationId)
@@ -94,10 +84,11 @@ lib.callback.register("pickle_businesses:startCrafting", function(source, busine
         end
         return
     end
-    TakeRequired(source, craftableItem.required)
+    if not BusinessNear(source,businessId,20) then return false end
     local startTime = os.time()
     CraftingPlayers[source] = {
         startTime = startTime,
+        owner=GetIdentifier(source),
         businessId = businessId,
         locationId = locationId,
         craftableId = craftableId
@@ -131,9 +122,21 @@ RegisterNetEvent("pickle_businesses:finishCrafting", function(success)
     if not craftingData then return ShowNotification(source, _L("business_crafting_not_found")) end
     local craftableItem = craftingData.craftableItems[craftableId]
     if not craftableItem then return ShowNotification(source, _L("business_crafting_item_not_found")) end
-    GiveRewards(source, {
+    if craftingPlayer.owner~=GetIdentifier(source) or os.time()-craftingPlayer.startTime<(Config.Crafting.minimumDuration or 5)
+        or not BusinessNear(source,businessId,20) or not CheckRequired(source,craftableItem.required) then return end
+    CraftingPlayers[source]=nil
+    if not TakeRequired(source,craftableItem.required) then return end
+    if not GiveRewards(source, {
         {type = "item", name = craftableItem.name, count = craftableItem.count},
-    })
+    },craftingPlayer) then
+        for _,part in ipairs(craftableItem.required or {}) do
+            if part.type=='cash' then AddPaymentMethodAmount(source,'cash',part.count)
+            elseif part.type=='weapon' then Inventory.AddWeapon(source,part.name,1)
+            else Inventory.AddItem(source,part.name,part.count) end
+        end
+        return
+    end
     CraftingPlayers[source] = nil
     ShowNotification(source, _L("business_crafting_success"))
 end)
+AddEventHandler("playerDropped",function() CraftingPlayers[source]=nil end)

@@ -152,8 +152,10 @@ lib.callback.register("pickle_businesses:customize:updateLocation", function(sou
         location.model = locationData.model
         if location.type == "crafting" then
             location.craftingType = locationData.craftingType
-        elseif location.type == "storage" then 
+        elseif location.type == "storage" then
             location.rank = locationData.rank
+            location.storageId=location.storageId or GenerateBusinessStorageId(businessId,business.game_info.locations)
+            Inventory.RegisterStash(location.storageId,_L("storage"),location.coords)
         end
         Businesses[businessId].game_info.locations[index] = location
         updatedLocation = location

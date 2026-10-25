@@ -32,7 +32,7 @@ function CreateBusiness(businessData, source)
         employees = businessData.employees or {},
         roles = businessData.roles or {},
     } 
-    MySQL.Async.insert("INSERT INTO pickle_businesses_locations (owner, label, price, rent, money, dirty_money, zone, game_info, store_listings, trade_listings, trade_inventory, daily_sales, recent_sales, recent_trades, employees, roles) VALUES (@owner, @label, @price, @rent, @money, @dirty_money, @zone, @game_info, @store_listings, @trade_listings, @trade_inventory, @daily_sales, @recent_sales, @recent_trades, @employees, @roles);", {
+    BusinessSQLInsert("INSERT INTO pickle_businesses_locations (owner, label, price, rent, money, dirty_money, zone, game_info, store_listings, trade_listings, trade_inventory, daily_sales, recent_sales, recent_trades, employees, roles) VALUES (@owner, @label, @price, @rent, @money, @dirty_money, @zone, @game_info, @store_listings, @trade_listings, @trade_inventory, @daily_sales, @recent_sales, @recent_trades, @employees, @roles);", {
         ["@owner"] = businessData.owner,
         ["@label"] = SafeCharacters(businessData.label, 255),
         ["@price"] = businessData.price,
@@ -59,7 +59,7 @@ function CreateBusiness(businessData, source)
                 end
             end
             businessData.game_info.locations = locations
-            MySQL.Async.execute("UPDATE pickle_businesses_locations SET game_info = @game_info WHERE id = @id;", {
+            BusinessSQLExecute("UPDATE pickle_businesses_locations SET game_info = @game_info WHERE id = @id;", {
                 ["@game_info"] = json.encode(businessData.game_info),
                 ["@id"] = id
             }, function(rowsChanged)
@@ -106,7 +106,7 @@ function InitializeBusiness(data, dontSync)
             break
         end
     end
-    if oIndex then
+    if oIndex and data.owner then
         local ownerFound = false
         for k,v in pairs(Businesses[index].employees) do
             if v.roleId == oRole.id then
@@ -123,7 +123,7 @@ function InitializeBusiness(data, dontSync)
             UpdateStoreEmployeesSQL(index)
         end
     end
-    RegisterBusinessStashes(Businesses[index].game_info.locations)
+    RegisterBusinessStashes(Businesses[index].game_info.locations or {})
     if dontSync then return end
     TriggerClientEvent("pickle_businesses:updateBusiness", -1, index, Businesses[index])
 end
@@ -216,7 +216,7 @@ function GenerateStoreTradeInventorySku(businessId)
     local sku = "sku_" .. math.random(1, 999999)
     for _, tradeItem in ipairs(Businesses[businessId].trade_inventory) do
         if tradeItem.sku == sku then
-            return GenerateTradeInventorySku(businessId)
+            return GenerateStoreTradeInventorySku(businessId)
         end
     end
     return sku
@@ -272,7 +272,7 @@ function DoesPlayerHaveStorePermission(source, businessId, permission)
     if not role then return false end
     if role.owner then return true end
     if permission == "owner" then return false end
-    return role.permissions[permission]
+    return role.permissions and role.permissions[permission] or false
 end
 
 function SendCustomInformationPacket(source, data)
@@ -343,7 +343,6 @@ function EditStoreTradeInventory(businessId, sku, quantity)
     if quantity <= 0 then
         return RemoveStoreTradeInventory(businessId, sku)
     end
-    Businesses[businessId].trade_inventory[index].price = price
     Businesses[businessId].trade_inventory[index].quantity = quantity
     -- Update the column in MySQL
     UpdateStoreTradeInventorySQL(businessId)
@@ -394,14 +393,14 @@ end
 function UpdateStoreFunds(businessId, paymentMethod)
     if paymentMethod == "cash" or paymentMethod == "card" then
         -- Update the column in MySQL
-        MySQL.Async.execute("UPDATE pickle_businesses_locations SET money = @amount WHERE id = @id;", {
+        BusinessSQLExecute("UPDATE pickle_businesses_locations SET money = @amount WHERE id = @id;", {
             ["@amount"] = Businesses[businessId].money,
             ["@id"] = Businesses[businessId].id
         }, function(rowsChanged)
         end)
     elseif paymentMethod == "dirtycash" then
         -- Update the column in MySQL
-        MySQL.Async.execute("UPDATE pickle_businesses_locations SET dirty_money = @amount WHERE id = @id;", {
+        BusinessSQLExecute("UPDATE pickle_businesses_locations SET dirty_money = @amount WHERE id = @id;", {
             ["@amount"] = Businesses[businessId].dirty_money,
             ["@id"] = Businesses[businessId].id
         }, function(rowsChanged)
@@ -415,6 +414,7 @@ function AddStoreFunds(businessId, paymentMethod, amount)
     if amount <= 0 then return end
     local balanceKey = nil
     local newBalance = 0
+    if not BusinessInt(amount,1,2147483647) then return false end
     if paymentMethod == "cash" or paymentMethod == "card" then
         Businesses[businessId].money = Businesses[businessId].money + amount
         newBalance = Businesses[businessId].money
@@ -434,6 +434,7 @@ function RemoveStoreFunds(businessId, paymentMethod, amount)
     if amount <= 0 then return end
     local balanceKey = nil
     local newBalance = 0
+    if not BusinessInt(amount,1,2147483647) then return false end
     if paymentMethod == "cash" or paymentMethod == "card" then
         Businesses[businessId].money = Businesses[businessId].money - amount
         newBalance = Businesses[businessId].money
@@ -478,7 +479,7 @@ function UpdateDailySales(businessId, amount)
         Businesses[businessId].daily_sales[currentDayIndex].amount = Businesses[businessId].daily_sales[currentDayIndex].amount + amount
     end
     -- Update the column in MySQL
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET daily_sales = @daily_sales WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET daily_sales = @daily_sales WHERE id = @id;", {
         ["@daily_sales"] = json.encode(Businesses[businessId].daily_sales),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -489,7 +490,7 @@ end
 function SendBusinessWebhook(businessId, webhookType, data)
     local business = Businesses[businessId]
     if not business or not business.game_info.webhooks then return end
-    if Config.WebhookEvents[webhookType] and business.game_info.webhooks[webhookType] then
+    if Config.WebhookEvents[webhookType] and business.game_info.webhooks and BusinessWebhookURL(business.game_info.webhooks[webhookType]) and business.game_info.webhooks[webhookType]~="" then
         Config.WebhookEvents[webhookType](businessId, Businesses[businessId], data, business.game_info.webhooks[webhookType])
     end
 end
@@ -531,7 +532,7 @@ function CreatePurchaseLog(source, businessId, listings, purchaseMethod)
 	table.insert(Businesses[businessId].recent_sales, 1, log)
     SendBusinessWebhook(businessId, "purchase", log)
     -- Update the column in MySQL
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET recent_sales = @recent_sales WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET recent_sales = @recent_sales WHERE id = @id;", {
         ["@recent_sales"] = json.encode(Businesses[businessId].recent_sales),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -665,7 +666,7 @@ function MoveStoreRole(businessId, roleId, promote)
 end
 
 function UpdateStoreEmployeesSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET employees = @employees WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET employees = @employees WHERE id = @id;", {
         ["@employees"] = json.encode(Businesses[businessId].employees),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -673,7 +674,7 @@ function UpdateStoreEmployeesSQL(businessId)
 end
 
 function UpdateStoreRolesSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET roles = @roles WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET roles = @roles WHERE id = @id;", {
         ["@roles"] = json.encode(Businesses[businessId].roles),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -681,7 +682,7 @@ function UpdateStoreRolesSQL(businessId)
 end
 
 function UpdateStoreListingsSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET store_listings = @store_listings WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET store_listings = @store_listings WHERE id = @id;", {
         ["@store_listings"] = json.encode(Businesses[businessId].store_listings),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -689,7 +690,7 @@ function UpdateStoreListingsSQL(businessId)
 end
 
 function UpdateStoreTradeInventorySQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET trade_inventory = @trade_inventory WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET trade_inventory = @trade_inventory WHERE id = @id;", {
         ["@trade_inventory"] = json.encode(Businesses[businessId].trade_inventory),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -697,7 +698,7 @@ function UpdateStoreTradeInventorySQL(businessId)
 end
 
 function UpdateStoreTradeListingsSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET trade_listings = @trade_listings WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET trade_listings = @trade_listings WHERE id = @id;", {
         ["@trade_listings"] = json.encode(Businesses[businessId].trade_listings),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -705,7 +706,7 @@ function UpdateStoreTradeListingsSQL(businessId)
 end
 
 function AddStoreTradeListing(businessId, data) 
-    if not IsStoreTradeListingValid(data) then end
+    if not IsStoreTradeListingValid(data) then return false end
     Businesses[businessId].trade_listings[#Businesses[businessId].trade_listings + 1] = {
         give = data.give,
         receive = data.receive,
@@ -730,7 +731,7 @@ end
 
 function EditStoreTradeListing(businessId, sku, data) 
     local index, tradeListing = GetStoreTradeListingBySku(businessId, sku)
-    if not IsStoreTradeListingValid(data) then end
+    if not IsStoreTradeListingValid(data) then return false end
     if not tradeListing then return end
     if not IsStoreTradeListingValid(data) then return end
     Businesses[businessId].trade_listings[index].give = data.give
@@ -773,22 +774,22 @@ function DeleteStoreTradeListing(businessId, sku)
     TriggerClientEvent("pickle_businesses:updateTradeListings", -1, businessId, Businesses[businessId].trade_listings)
 end
 
-function IsStoreTradeListingValid(tradeData)
-    if not tradeData.give or not tradeData.receive then return false end
-    if type(tradeData.give) ~= "table" or type(tradeData.receive) ~= "table" then return false end
-    if type(tradeData.give.items) ~= "table" or type(tradeData.receive.items) ~= "table" then return false end
-    if type(tradeData.give.currencies) ~= "table" or type(tradeData.receive.currencies) ~= "table" then return false end
-    for i=1, #tradeData.give.items do
-        if type(tradeData.give.items[i].name) ~= "string" or type(tradeData.give.items[i].quantity) ~= "number" then return false end
-    end
-    for i=1, #tradeData.give.currencies do
-        if type(tradeData.give.currencies[i].name) ~= "string" or type(tradeData.give.currencies[i].quantity) ~= "number" then return false end
-    end
-    for i=1, #tradeData.receive.items do
-        if type(tradeData.receive.items[i].name) ~= "string" or type(tradeData.receive.items[i].quantity) ~= "number" then return false end
-    end
-    for i=1, #tradeData.receive.currencies do
-        if type(tradeData.receive.currencies[i].name) ~= "string" or type(tradeData.receive.currencies[i].quantity) ~= "number" then return false end
+function IsStoreTradeListingValid(data)
+    if type(data)~='table' then return false end
+    for _,side in ipairs({'give','receive'}) do
+        local d=data[side]
+        if type(d)~='table' then return false end
+        for _,kind in ipairs({'items','currencies'}) do
+            if type(d[kind])~='table' or #d[kind]>50 then return false end
+            local seen={}
+            for _,row in ipairs(d[kind]) do
+                if type(row)~='table' or type(row.name)~='string' or #row.name>80 or seen[row.name]
+                    or not BusinessInt(row.quantity,1,1000000) then return false end
+                seen[row.name]=true
+                if kind=='items' and not Inventory.Items[row.name] then return false end
+                if kind=='currencies' and row.name~='cash' and row.name~='card' and row.name~='dirtycash' then return false end
+            end
+        end
     end
     return true
 end
@@ -908,11 +909,11 @@ function StartStoreTradeTransaction(source, businessId, sku)
 end
 
 function IsAmountOverflowing(amount)
-    return amount > 2147483647 or amount < 0
+    return not BusinessInt(amount,1,2147483647)
 end
 
 function UpdateGameInfoSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET game_info = @game_info WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET game_info = @game_info WHERE id = @id;", {
         ["@game_info"] = json.encode(Businesses[businessId].game_info),
         ["@id"] = Businesses[businessId].id
     }, function(rowsChanged)
@@ -920,7 +921,7 @@ function UpdateGameInfoSQL(businessId)
 end
 
 function UpdateSettingsSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET label = @label, game_info = @game_info WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET label = @label, game_info = @game_info WHERE id = @id;", {
         ["@label"] = SafeCharacters(Businesses[businessId].label, 255),
         ["@game_info"] = json.encode(Businesses[businessId].game_info),
         ["@id"] = Businesses[businessId].id
@@ -955,7 +956,7 @@ function GetPlayerBusinesses(source)
 end
 
 function UpdateStoreOwnerSQL(businessId)
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET owner = @owner, renting = @renting, roles = @roles, employees = @employees WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET owner = @owner, renting = @renting, roles = @roles, employees = @employees WHERE id = @id;", {
         ["@owner"] = Businesses[businessId].owner,
         ["@renting"] = Businesses[businessId].renting and 1 or 0,
         ["@roles"] = json.encode(Businesses[businessId].roles),
@@ -969,6 +970,7 @@ function CanPlayerHireToRole(source, businessId, roleId)
     local index, role = GetStoreRoleById(businessId, roleId)
     if not role then return false end
     if role.owner then return false end
+    if CanAdministrateBusinesses(source) then return true end
     if not DoesPlayerHaveStorePermission(source, businessId, "roles") then return false end
     local sIndex, sRole = GetStoreRoleById(businessId, Businesses[businessId].employees[GetIdentifier(source)].roleId)
     if sRole.id == roleId then return false end
@@ -994,18 +996,19 @@ function RemoveStoreEmployeePendingMoney(businessId, identifier, amount, dontUpd
     SetStoreEmployeePendingMoney(businessId, identifier, Businesses[businessId].employees[identifier].pendingMoney - amount, dontUpdate)
 end
 
-function SetStoreEmployeePendingMoney(businessId, identifier, amount, dontUpdate)
-    if not Businesses[businessId] then return end
-    if not Businesses[businessId].employees[identifier] then return end
-    amount = (amount > 0 and amount or 0)
-    local source = GetSourceFromIdentifier(identifier)
-    if source and amount > 0 then
-        return AddPaymentMethodAmount(source, "cash", amount)
-    end
-    Businesses[businessId].employees[identifier].pendingMoney = (amount > 0 and amount or 0)
-    if dontUpdate then return end
+function SetStoreEmployeePendingMoney(businessId,identifier,amount,dontUpdate)
+    local b=Businesses[businessId]; local employee=b and b.employees[identifier]
+    if not employee or not BusinessInt(amount,0,2147483647) then return false end
+    employee.pendingMoney=amount
     UpdateStoreEmployeesSQL(businessId)
-    TriggerClientEvent("pickle_businesses:updateEmployees", -1, businessId, GetBusinessEmployees(businessId))
+    local src=GetSourceFromIdentifier(identifier)
+    if src and amount>0 then
+        employee.pendingMoney=0 -- claim before the external credit can yield
+        UpdateStoreEmployeesSQL(businessId)
+        if AddPaymentMethodAmount(src,'cash',amount)~=true then employee.pendingMoney=amount; UpdateStoreEmployeesSQL(businessId) end
+    end
+    TriggerClientEvent('pickle_businesses:updateEmployees',-1,businessId,GetBusinessEmployees(businessId))
+    return true
 end
 
 function GetStoreEmployeePendingMoney(businessId, identifier)
@@ -1080,13 +1083,13 @@ function SaveStoreSettings(businessId, settings)
         Businesses[businessId].label = settings.label
     end
     if not Businesses[businessId].game_info.webhooks then Businesses[businessId].game_info.webhooks = {} end
-    if settings.business and type(settings.business) == "string" then
+    if settings.business and BusinessWebhookURL(settings.business) then
         Businesses[businessId].game_info.webhooks.business = settings.business
     end
-    if settings.purchase and type(settings.purchase) == "string" then
+    if settings.purchase and BusinessWebhookURL(settings.purchase) then
         Businesses[businessId].game_info.webhooks.purchase = settings.purchase
     end
-    if settings.trade and type(settings.trade) == "string" then
+    if settings.trade and BusinessWebhookURL(settings.trade) then
         Businesses[businessId].game_info.webhooks.trade = settings.trade
     end
     UpdateSettingsSQL(businessId)
@@ -1096,7 +1099,7 @@ end
 function UpdateStoreWipeSQL(businessId)
     local business = Businesses[businessId]
     if not business then return end
-    MySQL.Async.execute("UPDATE pickle_businesses_locations SET owner = @owner, label = @label, roles = @roles, employees = @employees, trade_listings = @trade_listings, daily_sales = @daily_sales, recent_sales = @recent_sales, recent_trades = @recent_trades, game_info = @game_info WHERE id = @id;", {
+    BusinessSQLExecute("UPDATE pickle_businesses_locations SET owner = @owner, label = @label, roles = @roles, employees = @employees, trade_listings = @trade_listings, daily_sales = @daily_sales, recent_sales = @recent_sales, recent_trades = @recent_trades, game_info = @game_info WHERE id = @id;", {
         ["@owner"] = business.owner,
         ["@label"] = SafeCharacters(business.label, 255),
         ["@roles"] = json.encode(business.roles),
@@ -1114,7 +1117,11 @@ end
 function StoreWipe(businessId, source)
     local business = Businesses[businessId]
     if not business then return end
+    -- Outstanding assets and payroll must be settled before changing ownership.
+    if business.money>0 or business.dirty_money>0 or #business.store_listings>0 or #business.trade_inventory>0 then return false end
+    for _,employee in pairs(business.employees) do if (employee.pendingMoney or 0)>0 then return false end end
     Businesses[businessId].label = "Untitled Business"
+    if not BusinessEstateEmpty(businessId) then return false end
     if source then
         ResetBusinessOwner(businessId, source)
     else
@@ -1177,7 +1184,7 @@ end
 function DeleteBusiness(businessId)
     local business = Businesses[businessId]
     if not business then return end
-    MySQL.Async.execute("DELETE FROM pickle_businesses_locations WHERE id = @id;", {
+    BusinessSQLExecute("DELETE FROM pickle_businesses_locations WHERE id = @id;", {
         ["@id"] = business.id
     }, function(rowsChanged)
     end)
@@ -1204,8 +1211,8 @@ RegisterNetEvent("pickle_businesses:purchaseBusiness", function(businessId, purc
     if cost > GetPaymentMethodAmount(source, "cash") then
         return ShowNotification(source, _L("insufficient_funds_" .. purchaseType, NumberWithCommas(cost)))
     end
-    if not BusinessCallback("ownerCheck", source, businessId, purchaseType, cost) then return end
-    ChargePaymentMethod(source, "cash", cost)
+    if not BusinessInt(cost,1,2147483647) or not BusinessCallback("ownerCheck", source, businessId, purchaseType, cost) then return end
+    if ChargePaymentMethod(source,"cash",cost)~=true then return end
     ResetBusinessOwner(businessId, source)
     Businesses[businessId].renting = (purchaseType == "rent")
     UpdateStoreOwnerSQL(businessId)
@@ -1226,6 +1233,7 @@ RegisterNetEvent("pickle_businesses:sellBusiness", function(businessId)
     local source = source
     local business = Businesses[businessId]
     if not business or (business.owner ~= GetIdentifier(source) and not CanAdministrateBusinesses(source)) or business.renting then return ShowNotification(source, _L("business_sell_fail")) end
+    if not BusinessEstateEmpty(businessId) then return ShowNotification(source,"Empty business funds, stock and payroll before selling.") end
     local price = business.price or 0
     local refund = math.floor(price * Config.BusinessSettings.sellScale)
     if refund > 0 then
@@ -1249,9 +1257,7 @@ RegisterNetEvent("pickle_businesses:removeBusiness", function(businessId, roleId
     local source = source
     local business = Businesses[businessId]
     if not business then return end
-    if business.game_info.placed and business.owner ~= GetIdentifier(source) and not CanAdministrateBusinesses(source) then
-        return ShowNotification(source, _L("no_permission"))
-    elseif not CanAdministrateBusinesses(source) then
+    if not (business.game_info.placed and business.owner==GetIdentifier(source)) and not CanAdministrateBusinesses(source) then
         return ShowNotification(source, _L("no_permission"))
     end
     ShowNotification(source, _L("business_removed", business.label))
@@ -1263,10 +1269,11 @@ lib.callback.register("pickle_businesses:getInventory", function(source)
     return inv
 end)
 lib.callback.register("pickle_businesses:getBusinessEmployees", function(source, businessId)
+    if not CanAdministrateBusinesses(source) and not GetBusinessEmployee(source,businessId) then return {} end
     return GetBusinessEmployees(businessId)
 end)
 lib.callback.register("pickle_businesses:getStoreData", function(source, businessId)
-    return Inventory.GetInventory(source), GetBusinessEmployees(businessId), CanAdministrateBusinesses(source)
+    return Inventory.GetInventory(source), (CanAdministrateBusinesses(source) or GetBusinessEmployee(source,businessId)) and GetBusinessEmployees(businessId) or {}, CanAdministrateBusinesses(source)
 end)
 lib.callback.register("pickle_businesses:getNearbyPlayers", function(source)
     local source = source
@@ -1291,6 +1298,7 @@ lib.callback.register("pickle_businesses:getNearbyPlayers", function(source)
     return players
 end)
 lib.callback.register("pickle_businesses:getPlayerBusinesses", function(source, target)
+    if target and target~=source and not CanAdministrateBusinesses(source) then return {} end
     return GetPlayerBusinesses(target or source)
 end)
 
@@ -1338,12 +1346,12 @@ function ProcessBusinessRent()
             else
                 Businesses[index].money = Businesses[index].money - cost
             end
-            MySQL.Async.execute("UPDATE pickle_businesses_locations SET money = @money WHERE id = @id;", {
+            BusinessSQLExecute("UPDATE pickle_businesses_locations SET money = @money WHERE id = @id;", {
                 ["@money"] = Businesses[index].money,
                 ["@id"] = Businesses[index].id
             })
         end
-        TriggerClientEvent("pickle_businesses:updateBusiness", -1, nil, Businesses)
+
     end
 end
 
@@ -1371,7 +1379,7 @@ function ProcessBusinessSalary()
             end
             if Businesses[index].money ~= moneyLeft then
                 Businesses[index].money = moneyLeft
-                MySQL.Async.execute("UPDATE pickle_businesses_locations SET money = @money WHERE id = @id;", {
+                BusinessSQLExecute("UPDATE pickle_businesses_locations SET money = @money WHERE id = @id;", {
                     ["@money"] = Businesses[index].money,
                     ["@id"] = Businesses[index].id
                 })
@@ -1393,6 +1401,7 @@ MySQL.ready(function()
     MySQL.Async.fetchAll("SELECT * FROM pickle_businesses_locations;", {}, function(result)
         if result then
             for _, row in ipairs(result) do
+                local ok,err=pcall(function()
                 row.renting = (row.renting == 1)
                 row.label = row.label
                 row.owner = row.owner
@@ -1411,6 +1420,8 @@ MySQL.ready(function()
                 row.employees = json.decode(row.employees)
                 row.roles = json.decode(row.roles)
                 InitializeBusiness(row, false)
+                end)
+                if not ok then print("Skipping invalid business row "..tostring(row.id)..": "..tostring(err)) end
             end
         end
     end)

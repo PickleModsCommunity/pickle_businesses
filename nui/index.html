@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://code.jquery.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data: https: nui: cfx-nui:; connect-src https:; object-src 'none'; base-uri 'none'">
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pickle's Businesses</title>
     <script src="https://code.jquery.com/jquery-3.6.3.min.js" integrity="sha256-pvPw+upLPUjgMXY0G+8O0xUf+/Im1MZjXxxgOcBQBXU=" crossorigin="anonymous"></script>
     <script src="assets/js/notify.js"></script>
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
+    <script src="https://unpkg.com/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/tippy.js@6.3.7/dist/tippy-bundle.umd.min.js" integrity="sha384-AiTRpehQ7zqeua0Ypfa6Q4ki/ddhczZxrKtiQbTQUlJIhBkTeyoZP9/W/5ulFt29" crossorigin="anonymous"></script>
     <script src="assets/js/market.js"></script>
     <script src="assets/js/market.buy.js"></script>
     <script src="assets/js/market.manage.js"></script>
@@ -16,7 +17,7 @@
     <script src="assets/js/customize.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/locale.js"></script>
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.11.2/css/all.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.min.css" integrity="sha384-KA6wR/X5RY4zFAHpv/CnoG2UW1uogYfdnP67Uv7eULvTveboZJg0qUpmJZb5VqzN" crossorigin="anonymous">
     <link rel="stylesheet" href="assets/css/style.css"/>  
     <link rel="stylesheet" href="assets/css/notify.css"/>  
     <link rel="stylesheet" href="assets/css/market.css"/> 
@@ -24,7 +25,7 @@
     <link rel="stylesheet" href="assets/css/market.manage.css"/> 
     <link rel="stylesheet" href="assets/css/market.trade.css"/> 
     <link rel="stylesheet" href="assets/css/customize.css"/>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.6.0/Chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.6.0/Chart.js" integrity="sha384-cYEXSCwjZh758LOfFjMvLByJGmtiEvNIzgz00Dlw15y5RS6yJrNyj7bM8R+XpTQE" crossorigin="anonymous"></script>
 </head>
 <body>
     <div id="app-market">

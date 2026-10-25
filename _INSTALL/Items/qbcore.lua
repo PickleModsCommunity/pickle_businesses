@@ -10,3 +10,7 @@
 ["tomato"]    = {["name"] = "tomato",    ["label"] = "tomato",    ["weight"] = 1,    ["type"] = "item",    ["image"] = "tomato.png",    ["unique"] = false,    ["useable"] = true,    ["shouldClose"] = true,    ["combinable"] = nil,    ["description"] = ""},
 ["potato"]    = {["name"] = "potato",    ["label"] = "potato",    ["weight"] = 1,    ["type"] = "item",    ["image"] = "potato.png",    ["unique"] = false,    ["useable"] = true,    ["shouldClose"] = true,    ["combinable"] = nil,    ["description"] = ""},
 ["special_seasoning"]    = {["name"] = "special_seasoning",    ["label"] = "special seasoning",    ["weight"] = 1,    ["type"] = "item",    ["image"] = "special_seasoning.png",    ["unique"] = false,    ["useable"] = true,    ["shouldClose"] = true,    ["combinable"] = nil,    ["description"] = ""},
+-- Configured output items
+["ecola"] = {name="ecola",label="ecola",weight=1,type="item",image="ecola.png",unique=false,useable=false,shouldClose=true},
+["ecolalight"] = {name="ecolalight",label="ecolalight",weight=1,type="item",image="ecolalight.png",unique=false,useable=false,shouldClose=true},
+["sprunk"] = {name="sprunk",label="sprunk",weight=1,type="item",image="sprunk.png",unique=false,useable=false,shouldClose=true},
