@@ -28,11 +28,13 @@ Inventory.GetInventory = function(source)
 end
 
 Inventory.AddItem = function(source, name, count, metadata, slot) -- Metadata is not required.
-    exports.ox_inventory:AddItem(source, name, count, metadata, slot)
+    local ok=exports.ox_inventory:AddItem(source, name, count, metadata, slot)
+    return ok==true
 end
 
 Inventory.RemoveItem = function(source, name, count, slot)
-    exports.ox_inventory:RemoveItem(source, name, count, nil, slot)
+    local ok=exports.ox_inventory:RemoveItem(source, name, count, nil, slot)
+    return ok==true
 end
 
 Inventory.SetMetadata = function(source, slot, metadata)

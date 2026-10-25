@@ -83,18 +83,18 @@ function OpenMarketSubmenu(businessId)
         end
     }
     lib.registerContext({
-        id = 'pb_billing_charge',
+        id = 'pb_market_submenu',
         title = _L("billing_charge_title"),
         -- canClose = false,
         onExit = function()
             lib.hideContext()
             SetTimeout(100, function()
-                OpenBillingMenu(businessId, locationId, data)
+                OpenMarketSubmenu(businessId)
             end)
         end,
         options = options
     })
-    lib.showContext('pb_billing_charge')
+    lib.showContext('pb_market_submenu')
 end
 
 function DisplayMarketLocations(businessId)
@@ -332,6 +332,7 @@ RegisterNUICallback("marketBuyAction", function(data, cb)
             cb(result)
         end, currentBusinessUI, data.cart, data.paymentMethod)
     end
+    if data.action~="purchase" then cb(true) end
 end)
 
 RegisterNUICallback("marketTradeAction", function(data, cb)
@@ -344,6 +345,7 @@ RegisterNUICallback("marketTradeAction", function(data, cb)
     elseif data.action == "accept_trade" then 
         TriggerServerEvent("pickle_businesses:acceptTrade", currentBusinessUI, data.sku)
     end
+    if true then cb(true) end
 end)
 
 RegisterNUICallback("marketManageAction", function(data, cb)
@@ -381,6 +383,7 @@ RegisterNUICallback("marketManageAction", function(data, cb)
     elseif data.action == "deposit" or data.action == "withdraw" then
         TriggerServerEvent("pickle_businesses:balanceTransaction", currentBusinessUI, data.action, data.currency, data.amount)
     end
+    if data.action~="getNearbyPlayers" then cb(true) end
 end)
 
 RegisterNUICallback("closeMenu", function(data, cb)
@@ -392,4 +395,5 @@ RegisterNetEvent("onResourceStart", function(name)
         Wait(1000)
         TriggerServerEvent("pickle_businesses:initializePlayer")
     end
+    if true then cb(true) end
 end)

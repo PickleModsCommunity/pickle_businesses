@@ -90,3 +90,7 @@
     stack = true,
     description = ""
 }
+-- Configured output items
+["ecola"] = {label="ecola",weight=1,stack=true},
+["ecolalight"] = {label="ecolalight",weight=1,stack=true},
+["sprunk"] = {label="sprunk",weight=1,stack=true},

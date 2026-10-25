@@ -35,7 +35,9 @@ end
 
 function CreateVeh(modelHash, ...)
     if not RequestModelSync(modelHash) then return end
-    while not HasModelLoaded(modelHash) do Wait(0) end
+    local deadline=GetGameTimer()+5000
+    while not HasModelLoaded(modelHash) and GetGameTimer()<deadline do Wait(0) end
+    if not HasModelLoaded(modelHash) then return nil end
     local veh = CreateVehicle(modelHash, ...)
     SetModelAsNoLongerNeeded(modelHash)
     if Config.GiveKeys then 
@@ -46,7 +48,9 @@ end
 
 function CreateNPC(modelHash, ...)
     if not RequestModelSync(modelHash) then return end
-    while not HasModelLoaded(modelHash) do Wait(0) end
+    local deadline=GetGameTimer()+5000
+    while not HasModelLoaded(modelHash) and GetGameTimer()<deadline do Wait(0) end
+    if not HasModelLoaded(modelHash) then return nil end
     local ped = CreatePed(26, modelHash, ...)
     SetModelAsNoLongerNeeded(modelHash)
     return ped
@@ -54,7 +58,9 @@ end
 
 function CreateProp(modelHash, ...)
     if not RequestModelSync(modelHash) then return end
-    while not HasModelLoaded(modelHash) do Wait(0) end
+    local deadline=GetGameTimer()+5000
+    while not HasModelLoaded(modelHash) and GetGameTimer()<deadline do Wait(0) end
+    if not HasModelLoaded(modelHash) then return nil end
     local obj = CreateObject(modelHash, ...)
     SetModelAsNoLongerNeeded(modelHash)
     return obj
@@ -262,6 +268,7 @@ function EnsureInteractionModel(index)
     end
     FreezeEntityPosition(entity, true)
     SetEntityHeading(entity, data.heading)
+    if not Interactions[index] or Interactions[index]~=data then if entity then DeleteEntity(entity) end; return end
     Interactions[index].entity = entity
     return entity
 end

@@ -6,12 +6,12 @@ function GetStackedItems(source, item)
     local name = item.name
     local inventoryItem = GetReferencedItem(source, item)
     local inventory = Inventory.GetInventory(source)
-    if not inventoryItem then return end 
+    if not inventoryItem then return 0,{} end
     if ((inventoryItem.durability or 100) < 100) then
         return 1, {inventoryItem}
     end
     for i=1, #inventory do
-        if (inventory[i].name == name and inventory[i].durability >= 100) then
+        if (inventory[i].name == name and (inventory[i].durability or 100) >= 100 and json.encode(inventory[i].metadata or {})==json.encode(inventoryItem.metadata or {})) then
             count = count + inventory[i].count;
             items[#items + 1] = inventory[i];
         end
@@ -63,7 +63,7 @@ function GetListingItemInfo(source, listing)
         return 0, {listing}
     end
     for i=1, #inventory do
-        if (inventory[i].name == name and inventory[i].durability >= 100) then
+        if (inventory[i].name == name and (inventory[i].durability or 100) >= 100 and json.encode(inventory[i].metadata or {})==json.encode(inventoryItem.metadata or {})) then
             count = count + inventory[i].count;
             items[#items + 1] = inventory[i];
         end
@@ -224,7 +224,7 @@ function ProcessListingStockAddition(businessId, sku, price, amount, source, don
         return
     end
     if source then
-        Inventory.RemoveItem(source, listing.name, amount)
+        if Inventory.RemoveItem(source,listing.name,amount)~=true then return false end
     end
     if source and not dontNotify then ShowNotification(source, _L("market_buy_listing_editsuccess")) end
     EditStoreListing(businessId, sku, price, listing.quantity + amount)
@@ -241,7 +241,7 @@ function ProcessListingStockRemoval(businessId, sku, price, amount, source, dont
         return
     end
     if source then
-        Inventory.AddItem(source, listing.name, amount, listing.metadata)
+        if Inventory.AddItem(source,listing.name,amount,listing.metadata)~=true then return false end
     end
     if source and not dontNotify then
         if listing.quantity - amount == 0 then
@@ -264,7 +264,7 @@ function ProcessTradeInventoryAddition(businessId, sku, amount, source, dontNoti
         return
     end
     if source then
-        Inventory.RemoveItem(source, tradeItem.name, amount)
+        if Inventory.RemoveItem(source,tradeItem.name,amount)~=true then return false end
     end
     if source and not dontNotify then ShowNotification(source, _L("market_buy_listing_editsuccess")) end
     EditStoreTradeInventory(businessId, sku, tradeItem.quantity + amount)
@@ -281,7 +281,7 @@ function ProcessTradeInventoryRemoval(businessId, sku, amount, source, dontNotif
         return
     end
     if source then
-        Inventory.AddItem(source, tradeItem.name, amount, tradeItem.metadata)
+        if Inventory.AddItem(source,tradeItem.name,amount,tradeItem.metadata)~=true then return false end
     end
     if source and not dontNotify then
         if tradeItem.quantity - amount == 0 then
@@ -297,6 +297,8 @@ end
 function IsPaymentMethodSufficient(source, businessId, paymentMethod, cost)
     local business = Businesses[businessId]
     if not business then return end
+    if not BusinessInt(cost,0,2147483647) then return false end
+    if paymentMethod=="dirtycash" and not BusinessDirtyAllowed(businessId) then return false end
     if paymentMethod == "cash" then
         local cash = GetPaymentMethodAmount(source, "cash")
         if cash < cost then
@@ -333,6 +335,12 @@ function CanCarryItems(source, items)
 end
 
 function IsCartPurchasable(source, businessId, cart, paymentMethod)
+    if type(cart)~='table' or #cart<1 or #cart>100 then return false end
+    local seen={}
+    for _,row in ipairs(cart) do
+        if type(row)~='table' or type(row.sku)~='string' or seen[row.sku] or not BusinessInt(row.quantity,1,1000000) then return false end
+        seen[row.sku]=true
+    end
     local itemSearch = {}
     local cost = 0
     for i=1, #cart do 
@@ -359,33 +367,23 @@ function IsCartPurchasable(source, businessId, cart, paymentMethod)
     return BusinessCallback("purchaseCheck", source, businessId, cart, cost)
 end
 
-function ProcessCartPurchase(source, businessId, cart, paymentMethod)
-    if not IsCartPurchasable(source, businessId, cart, paymentMethod) then return end
-    local cost = 0
-    local listings = {}
-    for i=1, #cart do 
-        local index, listing = GetStoreListingBySku(businessId, cart[i].sku)
-        if not listing then return end
-        cost = cost + (listing.price * cart[i].quantity)
-    end
-    ChargePaymentMethod(source, paymentMethod, cost)
-    for i=1, #cart do 
-        local index, listing = GetStoreListingBySku(businessId, cart[i].sku)
-        if listing then 
-            listings[#listings + 1] = {
-                sku = listing.sku,
-                name = listing.name,
-                price = listing.price,
-                quantity = cart[i].quantity
-            }
-            ProcessListingStockRemoval(businessId, cart[i].sku, listing.price, cart[i].quantity, source, true)
+function ProcessCartPurchase(src,businessId,cart,method)
+    if not IsCartPurchasable(src,businessId,cart,method) or not BusinessNear(src,businessId,20) then return false end
+    local total=0
+    for _,row in ipairs(cart) do local _,listing=GetStoreListingBySku(businessId,row.sku); total=total+listing.price*row.quantity end
+    if ChargePaymentMethod(src,method,total)~=true then return false end
+    local delivered,cost={},0
+    for _,row in ipairs(cart) do
+        local _,listing=GetStoreListingBySku(businessId,row.sku)
+        if Inventory.AddItem(src,listing.name,row.quantity,listing.metadata)==true then
+            cost=cost+listing.price*row.quantity
+            delivered[#delivered+1]={sku=row.sku,name=listing.name,price=listing.price,quantity=row.quantity}
+            EditStoreListing(businessId,row.sku,listing.price,listing.quantity-row.quantity)
         end
     end
-    AddStoreFunds(businessId, paymentMethod, cost)
-    BusinessCallback("postPurchase", source, businessId, cart, cost)
-    ShowNotification(source, _L("market_buy_success", #cart, _L("money_" .. paymentMethod), NumberWithCommas(cost)))
-    CreatePurchaseLog(source, businessId, listings, purchaseMethod)
-    return true
+    if total>cost then AddPaymentMethodAmount(src,method,total-cost) end
+    if cost>0 then AddStoreFunds(businessId,method,cost); CreatePurchaseLog(src,businessId,delivered,method,cost) end
+    return cost==total
 end
 
 RegisterNetEvent("pickle_businesses:moveStoreListing", function(businessId, fromSku, toSku)
@@ -420,7 +418,7 @@ RegisterNetEvent("pickle_businesses:addStoreListing", function(businessId, itemI
     ShowNotification(source, _L("market_buy_listing_addsuccess"))
     AddStoreListing(businessId, {
         name = items[1].name,
-        metadata = (count == 1 and items[1].metadata or nil),
+        metadata = items[1].metadata or {},
         price = price,
         quantity = quantity
     })
@@ -481,7 +479,7 @@ RegisterNetEvent("pickle_businesses:addTradeListing", function(businessId, trade
     local source = source
     local business = Businesses[businessId]
     if not business then return end
-    if not DoesPlayerHaveStorePermission(source, businessId, "items") then
+    if not DoesPlayerHaveStorePermission(source, businessId, "funds") then
         ShowNotification(source, _L("no_permission"))
         return
     end
@@ -492,7 +490,7 @@ RegisterNetEvent("pickle_businesses:updateTradeListing", function(businessId, sk
     local source = source
     local business = Businesses[businessId]
     if not business then return end
-    if not DoesPlayerHaveStorePermission(source, businessId, "items") then
+    if not DoesPlayerHaveStorePermission(source, businessId, "funds") then
         ShowNotification(source, _L("no_permission"))
         return
     end
@@ -503,7 +501,7 @@ RegisterNetEvent("pickle_businesses:deleteTradeListing", function(businessId, sk
     local source = source
     local business = Businesses[businessId]
     if not business then return end
-    if not DoesPlayerHaveStorePermission(source, businessId, "items") then
+    if not DoesPlayerHaveStorePermission(source, businessId, "funds") then
         ShowNotification(source, _L("no_permission"))
         return
     end
@@ -514,7 +512,7 @@ RegisterNetEvent("pickle_businesses:acceptTrade", function(businessId, sku)
     local source = source
     local business = Businesses[businessId]
     if not business then return end
-    if not DoesPlayerHaveStorePermission(source, businessId, "items") then
+    if not BusinessNear(source,businessId,20) then
         ShowNotification(source, _L("no_permission"))
         return
     end
@@ -536,7 +534,7 @@ RegisterNetEvent("pickle_businesses:addTradeInventory", function(businessId, ite
     ShowNotification(source, _L("market_manage_newitem_addsuccess"))
     AddStoreTradeInventory(businessId, {
         name = items[1].name,
-        metadata = (count == 1 and items[1].metadata or nil),
+        metadata = items[1].metadata or {},
         price = price,
         quantity = quantity
     })
@@ -693,8 +691,8 @@ RegisterNetEvent("pickle_businesses:balanceTransaction", function(businessId, ac
             timestamp = GetDateTime()
         })
         ShowNotification(source, _L("market_manage_deposit_success", NumberWithCommas(amount), _L("money_" .. currency)))
-        AddStoreFunds(businessId, currency, amount)
-        ChargePaymentMethod(source, currency, amount)
+        if ChargePaymentMethod(source,currency,amount)~=true then return end
+        AddStoreFunds(businessId,currency,amount)
     elseif action == "withdraw" then
         local businessMoney = GetStoreFunds(businessId, currency)
         if businessMoney < amount then
@@ -709,7 +707,7 @@ RegisterNetEvent("pickle_businesses:balanceTransaction", function(businessId, ac
         })
         ShowNotification(source, _L("market_manage_withdraw_success", NumberWithCommas(amount), _L("money_" .. currency)))
         RemoveStoreFunds(businessId, currency, amount)
-        AddPaymentMethodAmount(source, currency, amount)
+        if AddPaymentMethodAmount(source,currency,amount)~=true then AddStoreFunds(businessId,currency,amount) end
     end
 end)
 
@@ -719,7 +717,7 @@ RegisterNetEvent("pickle_businesses:placeMarket", function(marketType, coords, r
     if not market then return end
     local count = Inventory.GetItemCount(source, marketType)
     if count < 1 then return end
-    Inventory.RemoveItem(source, marketType, 1)
+    if Inventory.RemoveItem(source,marketType,1)~=true then return end
     local businessData = {
         owner = GetIdentifier(source),
         price = 0,

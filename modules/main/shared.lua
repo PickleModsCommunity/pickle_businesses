@@ -14,7 +14,7 @@ end
 
 function DoesZoneAcceptDirtyCash(zoneName)
     local zoneIndex, zone = GetBusinessZoneIndexByName(zoneName)
-    return (zone.acceptsDirtyCash == true)
+    return (zone and zone.acceptsDirtyCash == true) or false
 end
 
 function GetBusinessZoneIndexByName(zoneName)

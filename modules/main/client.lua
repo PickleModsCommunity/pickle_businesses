@@ -19,6 +19,7 @@ function CheckPermissionLevel(businessId, rankIndex)
     local employee = GetBusinessEmployee(businessId)
     if not employee then return false end
     local roleId = employee.roleId
+    rankIndex=tonumber(rankIndex) or #business.roles
     if rankIndex > #business.roles then 
         rankIndex = #business.roles
     end
@@ -276,4 +277,7 @@ RegisterNetEvent("pickle_businesses:updateLocation", function(businessId, locati
         table.insert(Businesses[businessId].game_info.locations, data)
     end
     DisplayBusinessLocations(businessId)
+end)
+lib.callback.register('pickle_businesses:acceptOwnership',function(label)
+    return lib.alertDialog({header='Business transfer',content='Accept ownership of '..tostring(label)..'?',cancel=true})=='confirm'
 end)

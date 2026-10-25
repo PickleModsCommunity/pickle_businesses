@@ -8,12 +8,8 @@ Inventory.Ready = false
 
 -- STASHES
 
-Inventory.OpenStash = function(id, label)
-    local other = {}
-    other.maxweight = Config.Storage.maxWeight
-    other.slots = Config.Storage.slots
-    TriggerServerEvent("inventory:server:OpenInventory", "stash", id, other)
-    TriggerEvent("inventory:client:SetCurrentStash", id)
+Inventory.OpenStash = function(id,label)
+    ShowNotification('Business storage requires ox_inventory for server-enforced role permissions.')
 end
 
 RegisterNetEvent("pickle_businesses:setupInventory", function(data)

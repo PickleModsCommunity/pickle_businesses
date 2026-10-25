@@ -29,6 +29,7 @@ function OpenCraftingSubmenu(businessId, locationId, craftableId)
             lib.callback("pickle_businesses:startCrafting", "", function(result)
                 if not result then return end
                 CreateThread(function()
+                    local craftStarted=GetGameTimer()
                     local action = craftableItem.action
                     local success = true
                     if action then
@@ -39,6 +40,8 @@ function OpenCraftingSubmenu(businessId, locationId, craftableId)
                             rotation = location.rotation
                         })
                     end
+                    local remaining=(Config.Crafting.minimumDuration or 5)*1000-(GetGameTimer()-craftStarted)
+                    if success and remaining>0 then Wait(remaining) end
                     TriggerServerEvent("pickle_businesses:finishCrafting", success)
                 end)
             end, businessId, locationId, craftableId)

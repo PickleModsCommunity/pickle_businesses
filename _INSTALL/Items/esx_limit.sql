@@ -10,5 +10,9 @@ INSERT INTO `items` (`name`, `label`, `limit`) VALUES
 	('lettuce', 'lettuce', 100),
 	('tomato', 'tomato', 100),
 	('potato', 'potato', 100),
-	('special_seasoning', 'special seasoning', 100),
-;
+	('special_seasoning', 'special seasoning', 100);
+-- Missing configured recipe/supply items
+INSERT INTO items (name,label,`limit`) VALUES
+('ecola','ecola',100),
+('ecolalight','ecolalight',100),
+('sprunk','sprunk',100);
